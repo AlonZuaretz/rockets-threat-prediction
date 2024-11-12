@@ -1,4 +1,3 @@
-import os
 import sys
 import subprocess
 
@@ -22,7 +21,7 @@ def main():
         "numpy",  # Example package, you can add more
         "pandas",
         "torch",
-
+        "transformers",
     ]
 
     install_packages(packages)
