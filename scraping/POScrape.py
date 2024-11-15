@@ -123,9 +123,9 @@ def parser(file_name):
     df.to_csv(f"{file_name}.csv")
 
 def parse_all():
-    files = glob.glob("*.html")
+    files = glob.glob("./data/*.html")
     for file in files:
         parser(file)
 
 if __name__ == '__main__':
-    driver()
+    parse_all()
