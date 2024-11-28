@@ -3,23 +3,26 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from transformers import AutoModel, AutoTokenizer
+from transformers import BertTokenizer, BertModel
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
+from datetime import datetime
+
+
 
 
 
 class ArticleEmbeddingNet(nn.Module):
-    def __init__(self, model_name='bert-base-uncased'):
+    def __init__(self, model_name='bert-base-multilingual-cased'):
         super(ArticleEmbeddingNet, self).__init__()
         # Load a pretrained large language model
-        self.llm = AutoModel.from_pretrained(model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = BertModel.from_pretrained(model_name)
+        self.tokenizer = BertTokenizer.from_pretrained(model_name)
 
     def forward(self, df):
         # Load CSV and extract Title, Body, Day, and Hour
-        titles = df['Title'].tolist()
-        bodies = df['Body'].tolist()
+        titles = df['Main_Titles'].tolist()
+        bodies = df['Sub_Titles'].tolist()
 
         # Prepare inputs for the LLM for titles
         title_inputs = self.tokenizer(titles, padding=True, truncation=True, return_tensors="pt")
@@ -27,93 +30,52 @@ class ArticleEmbeddingNet(nn.Module):
 
         # Extract embeddings for titles
         with torch.no_grad():
-            title_embeddings = self.llm(**title_inputs).last_hidden_state[:, 0, :]  # CLS token representation
+            title_embeddings = self.model(**title_inputs).last_hidden_state[:, 0, :]  # CLS token representation
 
         # Extract embeddings for bodies
         with torch.no_grad():
-            body_embeddings = self.llm(**body_inputs).last_hidden_state[:, 0, :]  # CLS token representation
+            body_embeddings = self.model(**body_inputs).last_hidden_state[:, 0, :]  # CLS token representation
 
         # Update DataFrame with embeddings
-        df['Title'] = title_embeddings.tolist()
-        df['Body'] = body_embeddings.tolist()
+        df['Main_Titles'] = title_embeddings.tolist()
+        df['Sub_Titles'] = body_embeddings.tolist()
 
         return df
 
 
-class ThreatsDataset(Dataset):
-    def __init__(self, data, labels, sequence_length):
-        self.data = data
-        self.labels = labels
-        self.sequence_length = sequence_length
-        self.num_rows = data.shape[0]
-
-    def __len__(self):
-        return self.num_rows - self.sequence_length + 1
-
-    def __getitem__(self, idx):
-        sequence = self.data[idx:idx + self.sequence_length, :]
-        label = self.labels[idx, :]
-        return sequence, label, idx
-
-
-class ArticlesDataset(Dataset):
-    def __init__(self, data, df, sequence_length):
-        self.data = data
-        self.df = df  # DataFrame with 'date' and 'hour' columns
-        self.sequence_length = sequence_length
-        self.num_rows = data.shape[0]
-
-    def __len__(self):
-        return self.num_rows - self.sequence_length + 1
-
-    def find_start_index(self, date, hour):
-        # Find the first index where the date and hour are greater than the given input
-        mask = (self.df['date'] < date) | ((self.df['date'] == date) & (self.df['hour'] < hour))
-        indices = self.df[mask].index
-        if len(indices) == 0:
-            raise ValueError("No valid index found before the given date and hour.")
-        return indices[-1]
-
-    def __getitem__(self, idx):
-        date, hour = idx
-        start_idx = self.find_start_index(date, hour)
-        if start_idx - self.sequence_length + 1 < 0:
-            raise ValueError("Not enough samples prior to the given date and hour for the specified sequence length.")
-        sequence = self.data[start_idx - self.sequence_length + 1:start_idx + 1, :]
-        return sequence, start_idx - self.sequence_length + 1
-
-
 class CreateDataSet(Dataset):
-    def __init__(self, ds1, ds2, seq_len1, seq_len2):
-        self.ds1 = ds1
-        self.ds2 = ds2
+    def __init__(self, ds1, ds2, labels, last_time, seq_len1, seq_len2):
+        self.ds1 = ds1 # Articles
+        self.ds2 = ds2 # Threats
+        self.labels = labels
+        self.last_time = last_time
         self.seq_len1 = seq_len1
         self.seq_len2 = seq_len2
 
-        def __len__(self):
-            return len(self.dataset1)
+    def __len__(self):
+        return len(self.ds2)
 
-        def __getitem__(self, idx):
-            # Get the sequence from the first dataset based on its sequence length
-            seq1 = self.dataset1[idx][:self.seq_len1]
+    def __getitem__(self, idx):
+        # Get the sequence from the first dataset based on its sequence length
+        seq2 = self.ds2[idx][:][:]
 
-            # Find the last timestamp of the current sequence from dataset1
-            last_time = seq1[-1][0]  # Assuming time is the first element in each sample
+        # Find the last timestamp of the current sequence from dataset1
+        last_time = self.last_time[idx]  # Assuming time is the first element in each sample
 
-            # Find the corresponding sequence in the second dataset ending with last_time
-            seq2 = self.find_corresponding_sequence(last_time)
+        # Find the corresponding sequence in the second dataset ending with last_time
+        seq1 = self.find_corresponding_sequence(last_time)
 
-            # Adjust the sequence length for dataset2
-            seq2 = seq2[-self.seq_len2:]
+        label = self.labels[idx, :]
 
-            return seq1, seq2
+        return seq1, seq2, label
 
-        def find_corresponding_sequence(self, last_time):
-            # Find the sequence in dataset2 that ends with the given time
-            for seq in self.dataset2:
-                if seq[-1][0] == last_time:
-                    return seq
-            raise ValueError(f"No corresponding sequence found in dataset2 for time {last_time}")
+    def find_corresponding_sequence(self, last_time):
+        # Find the sequence in dataset2 that ends with the given time
+        for (idx, time) in enumerate(self.ds1[:, 0]):
+            if time > last_time:
+                idx = idx - 1
+                return self.ds1[idx - self.seq_len1:idx, 1:]
+        raise ValueError(f"No corresponding sequence found in dataset2 for time {last_time}")
 
 def min_max_normalize(array):
 
@@ -162,6 +124,7 @@ def one_hot_encoder(df):
             one_hot_vector[location_to_index[loc]] = 1
         # Add the row to the result
         row = {
+            'week day': group['week day'].iloc[0],
             'hour': group['hour'].iloc[0],
             'day': group['day'].iloc[0],
             'month': group['month'].iloc[0],
@@ -195,9 +158,10 @@ def one_hot_encoder(df):
 
     # Convert labels to DataFrame
     labels_df = pd.DataFrame(labels)
+    time_id_df = labels_df['time_id']
+    labels_df = labels_df.drop(columns=['time_id'])
 
-    return result_df, labels_df
-
+    return result_df, labels_df, time_id_df
 
 
 def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size):
@@ -205,48 +169,63 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     # Pass articles through an LLM to get embeddings:
     # article_embedding_model = ArticleEmbeddingNet()
     # articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
+    articles_df = pd.read_csv('Data/embedded_articles.csv')
 
     # get unique row for each hour and date with a one-hot enconding:
-    threats_df, labels_df = one_hot_encoder(threats_df)
+    threats_df, labels_df, time_id_df = one_hot_encoder(threats_df)
 
-    # articles_np = articles_df.to_numpy()
+    articles_np = articles_df.to_numpy()
     threats_np, labels_np = threats_df.to_numpy(), labels_df.to_numpy()
 
-    # articles_np = min_max_normalize(articles_np)
+    # Min Max normalize each column separately
+    articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
     threats_np = min_max_normalize(threats_np)
 
-    # Split articles into train, test, validation sets
-    # articles_train, articles_temp = train_test_split(articles_np, test_size=0.3, random_state=42)
-    # articles_val, articles_test = train_test_split(articles_temp, test_size=(1 / 3), random_state=42)
+    # Split the embedded strings into long rows:
+    main_titles = articles_np[:, 7]
+    sub_titles = articles_np[:, 8]
+    split_rows = [list(map(float, row.strip('[]').split(','))) for row in main_titles]
+    main_titles = np.array(split_rows, dtype=np.float32)
+    split_rows = [list(map(float, row.strip('[]').split(','))) for row in sub_titles]
+    sub_titles = np.array(split_rows, dtype=np.float32)
+
+    # Concatenate the articles array with the main and sub titles
+    articles_np = articles_np[:, 1:7]
+    articles_np = np.array(articles_np, dtype=np.float32)
+    articles_np = np.concatenate((articles_np, main_titles, sub_titles), axis=1)
+
+    # Split the threats data into sequences
+    num_sequences = len(threats_np) - threats_seqlen + 1
+    threats_dim = threats_np.shape[1]
+    labels_dim = labels_np.shape[1]
+    threats_sequences = np.zeros((num_sequences, threats_seqlen, threats_dim), dtype=np.float32)
+    labels = np.zeros((num_sequences, labels_dim), dtype=np.float32)
+    last_time = np.zeros(num_sequences)
+
+    for i in range(0, num_sequences, 1):
+        threats_sequences[i, :, :] = threats_np[i: i + threats_seqlen, :]
+        labels[i, :] = labels_np[i, :]
+        last_time[i] = int(time_id_df[i].timestamp())
 
     # Split threats into train, test, validation sets
-    threats_train, threats_temp, labels_train, labels_temp = train_test_split(threats_np, labels_np, test_size=0.3, random_state=42)
-    threats_val, threats_test, labels_val, labels_test = train_test_split(threats_temp, labels_temp, test_size=(1 / 3), random_state=42)
+    threats_train, threats_temp, labels_train, labels_temp, last_time_train, last_time_temp = train_test_split(
+        threats_sequences, labels, last_time, test_size=0.3, random_state=42
+    )
 
+    threats_val, threats_test, labels_val, labels_test, last_time_val, last_time_test = train_test_split(
+        threats_temp, labels_temp, last_time_temp, test_size=(1 / 3), random_state=42
+    )
 
-    # Articles Dataloader:
-    # articles_train_ds = ArticlesDataset(articles_train, threats_df[['date', 'hour']], articles_seqlen)
-    # articles_val_ds = ArticlesDataset(articles_val,threats_df[['date', 'hour']], articles_seqlen)
-    # articles_test_ds = ArticlesDataset(articles_test, threats_df[['date', 'hour']], articles_seqlen)
+    # Dataset:
+    train_ds = CreateDataSet(articles_np, threats_train, labels_train, last_time_train, articles_seqlen, threats_seqlen)
+    val_ds = CreateDataSet(articles_np, threats_val, labels_val, last_time_train, articles_seqlen, threats_seqlen)
+    test_ds = CreateDataSet(articles_np, threats_test, labels_test, last_time_train, articles_seqlen, threats_seqlen)
 
-    # articles_train_dl = DataLoader(articles_train_ds, batch_size=batch_size, shuffle=True)
-    # articles_val_dl = DataLoader(articles_val_ds, batch_size=batch_size, shuffle=False)
-    # articles_test_dl = DataLoader(articles_test_ds, batch_size=batch_size, shuffle=False)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
-    articles_train_dl = []
-    articles_val_dl = []
-    articles_test_dl = []
-
-    # Threats Dataloader:
-    threats_train_ds = ThreatsDataset(threats_train, labels_train, threats_seqlen)
-    threats_val_ds = ThreatsDataset(threats_val, labels_val, threats_seqlen)
-    threats_test_ds = ThreatsDataset(threats_test, labels_test, threats_seqlen)
-
-    threats_train_dl = DataLoader(threats_train_ds, batch_size=batch_size, shuffle=True)
-    threats_val_dl = DataLoader(threats_val_ds, batch_size=batch_size, shuffle=False)
-    threats_test_dl = DataLoader(threats_test_ds, batch_size=batch_size, shuffle=False)
-
-    return articles_train_dl, articles_val_dl, articles_test_dl, threats_train_dl, threats_val_dl, threats_test_dl
+    return train_dl, val_dl, test_dl
 
 
 

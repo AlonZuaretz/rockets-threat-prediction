@@ -1,0 +1,20 @@
+the timing aligns with respect to threats data set.
+
+threats is first separated into overlapping sequences to form a tensor of dimensions:
+ [num sequences, sequence length, dimension of each sequence]
+
+for each such sequence, there exists a tensor of labels which is the presence of threats in the following hour.
+this tensor is of dimension: [num sequences, num locations]
+
+in addition, for each sequence, there exists an array called last_time.
+this array will be used to retrieve the corresponding sequence of the articles data set.
+It is the timestamp of the last sample of the sequence in seconds.
+
+the articles data set is not split because it is determined by an already split data set
+
+
+articles data set explanation:
+
+columns 0 to 5 are for time
+next columns are for embedding
+first column is used to match the last_time argument from the threats data set

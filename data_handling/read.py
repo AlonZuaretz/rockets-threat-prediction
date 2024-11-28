@@ -1,10 +1,66 @@
 
 import pandas as pd
+import re
+
+from datetime import datetime
 
 
-def read_preprocess_articles(file_path):
-        x=5
-        return pd.DataFrame()
+def read_from_csv():
+    # Articles
+    articles_df = read_preprocess_articles()
+
+    # Threats
+    threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
+    # locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
+    #                      "תל אביב - מרכז העיר"]
+    locations_to_keep = 50 # locations that appear more than 50 times will remain in data set
+
+    types_to_keep = ["ירי רקטות וטילים"]
+    threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_to_keep,
+                                                                         types_to_keep)
+
+    return articles_df, threats_df, len(location_mapping)
+
+
+def read_preprocess_articles():
+    date_time_file = r"Data\Ynet stuff\Ynet_Articles_Data\Full\Date_Time.txt"
+    main_titles_file = r"Data\Ynet stuff\Ynet_Articles_Data\Full\Main_Titles.txt"
+    sub_titles_file = r"Data\Ynet stuff\Ynet_Articles_Data\Full\Sub_Titles.txt"
+
+    # Parse each of the files
+    date_time_df = parse_date_time_file(date_time_file)
+    main_titles_df = parse_title_file(main_titles_file).rename(columns={'Title': 'Main_Titles'})
+    sub_titles_df = parse_title_file(sub_titles_file).rename(columns={'Title': 'Sub_Titles'})
+
+    # Process:
+    # Create new columns for timestamp, day of the week, hour, day, month, year
+    date_time_df['timestamp'] = date_time_df['Date_Time'].apply(lambda x: int(x.timestamp()))  # Timestamp in seconds
+    date_time_df['week day'] = date_time_df['Date_Time'].dt.day_name()  # Day of the week (e.g., Sunday)
+    date_time_df['hour'] = date_time_df['Date_Time'].dt.hour  # Hour of the day
+    date_time_df['day'] = date_time_df['Date_Time'].dt.day  # Day of the month
+    date_time_df['month'] = date_time_df['Date_Time'].dt.month  # Month
+    date_time_df['year'] = date_time_df['Date_Time'].dt.year  # Year
+    date_time_df = date_time_df.drop(columns=['Date_Time'])
+
+    day_mapping = {
+        'Sunday': 1,  # Sunday
+        'Monday': 2,  # Monday
+        'Tuesday': 3,  # Tuesday
+        'Wednesday': 4,  # Wednesday
+        'Thursday': 5,  # Thursday
+        'Friday': 6,  # Friday
+        'Saturday': 7  # Saturday
+    }
+    date_time_df['week day'] = date_time_df['week day'].map(day_mapping)
+
+
+    # Combine all data into a single DataFrame
+    combined_df = pd.merge(date_time_df, main_titles_df, on='Sample_Number')
+    combined_df = pd.merge(combined_df, sub_titles_df, on='Sample_Number')
+    combined_df = combined_df.sort_values(by='timestamp', ascending=True).reset_index(drop=True)
+    combined_df = combined_df.drop_duplicates(keep=False)
+
+    return combined_df
 
 
 def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
@@ -15,8 +71,19 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
         df = df.iloc[::-1].reset_index(drop=True)
 
         # Filter rows
+        # Count the occurrences of each location
+        location_counts = df['location'].value_counts()
+
+        # Filter locations that appear more than X times
+        locations_to_keep = location_counts[location_counts > locations_to_keep].index
+
+        # Keep only rows with locations that appear more than X times
         df = df[df['location'].isin(locations_to_keep)]
-        df = df[df['type'].isin(types_to_keep)]
+
+        # df = df[df['location'].isin(locations_to_keep)]
+        # df = df[df['type'].isin(types_to_keep)]
+
+
 
         # Modify the Time column to keep only the hour and convert it to a number
         df['hour'] = df['hour'].str.split(':').str[0].astype(int)
@@ -54,32 +121,65 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
 
         return df, location_mapping, type_mapping
 
-def read_from_csv():
-        # Articles
-        articles_csv_path = r""
-        articles_df = read_preprocess_articles(articles_csv_path)
 
-        # Threats
-        threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
-        locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
-                             "תל אביב - מרכז העיר"]
-        types_to_keep = ["ירי רקטות וטילים"]
-        threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_to_keep, types_to_keep)
+def parse_date_time_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
 
-        return articles_df, threats_df
+    # Initialize an empty list to store parsed data
+    data = []
+
+    # Iterate over lines and parse information
+    sample_number = None
+    for line in lines:
+        line = line.strip()  # Remove trailing newline and spaces
+        if line.startswith("Sample number:"):
+            sample_number = int(line.split(":")[1].strip())
+        elif re.match(r'\d{2}\.\d{2}\.\d{2} \| \d{2}:\d{2}', line):
+            # Convert the date-time string to a datetime object
+            date_time_str = line.replace('|', '').strip()
+            date_time = datetime.strptime(date_time_str, "%d.%m.%y %H:%M")
+            data.append({'Sample_Number': sample_number, 'Date_Time': date_time})
+
+    return pd.DataFrame(data)
+
+# Function to parse the Main_Titles and Sub_Titles files
+def parse_title_file(file_path):
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
+        lines = file.readlines()
+
+    # Initialize an empty list to store parsed data
+    data = []
+
+    # Iterate over lines and parse information
+    sample_number = None
+    for line in lines:
+        line = line.strip()  # Remove trailing newline and spaces
+        if line.startswith("Sample number:"):
+            sample_number = int(line.split(":")[1].strip())
+        elif line and not line.startswith("Page Number:"):
+            # Assuming that the non-empty line after "Sample number" is the title
+            title = line
+            data.append({'Sample_Number': sample_number, 'Title': title})
+
+    return pd.DataFrame(data)
+
 
 # if __name__ == "__main__":
-#         # Articles
-#         articles_csv_path = r""
-#         articles_df = read_preprocess_articles(articles_csv_path)
-#
-#         # Threats
-#         threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
-#         locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
-#                              "תל אביב - מרכז העיר"]
-#         types_to_keep = ["ירי רקטות וטילים"]
-#         threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path,
-#                                                                                      locations_to_keep, types_to_keep)
+# #         # Articles
+# #         articles_csv_path = r""
+# #         articles_df = read_preprocess_articles(articles_csv_path)
+# #
+# #         # Threats
+# #         threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
+# #         locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
+# #                              "תל אביב - מרכז העיר"]
+# #         types_to_keep = ["ירי רקטות וטילים"]
+# #         threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path,
+# #                                                                                      locations_to_keep, types_to_keep)
+
+
+
 
 
 
