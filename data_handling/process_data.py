@@ -41,8 +41,9 @@ class ArticleEmbeddingNet(nn.Module):
 
 
 class ThreatsDataset(Dataset):
-    def __init__(self, data, sequence_length):
+    def __init__(self, data, labels, sequence_length):
         self.data = data
+        self.labels = labels
         self.sequence_length = sequence_length
         self.num_rows = data.shape[0]
 
@@ -51,7 +52,8 @@ class ThreatsDataset(Dataset):
 
     def __getitem__(self, idx):
         sequence = self.data[idx:idx + self.sequence_length, :]
-        return sequence, idx
+        label = self.labels[idx, :]
+        return sequence, label, idx
 
 
 class ArticlesDataset(Dataset):
@@ -81,6 +83,38 @@ class ArticlesDataset(Dataset):
         return sequence, start_idx - self.sequence_length + 1
 
 
+class CreateDataSet(Dataset):
+    def __init__(self, ds1, ds2, seq_len1, seq_len2):
+        self.ds1 = ds1
+        self.ds2 = ds2
+        self.seq_len1 = seq_len1
+        self.seq_len2 = seq_len2
+
+        def __len__(self):
+            return len(self.dataset1)
+
+        def __getitem__(self, idx):
+            # Get the sequence from the first dataset based on its sequence length
+            seq1 = self.dataset1[idx][:self.seq_len1]
+
+            # Find the last timestamp of the current sequence from dataset1
+            last_time = seq1[-1][0]  # Assuming time is the first element in each sample
+
+            # Find the corresponding sequence in the second dataset ending with last_time
+            seq2 = self.find_corresponding_sequence(last_time)
+
+            # Adjust the sequence length for dataset2
+            seq2 = seq2[-self.seq_len2:]
+
+            return seq1, seq2
+
+        def find_corresponding_sequence(self, last_time):
+            # Find the sequence in dataset2 that ends with the given time
+            for seq in self.dataset2:
+                if seq[-1][0] == last_time:
+                    return seq
+            raise ValueError(f"No corresponding sequence found in dataset2 for time {last_time}")
+
 def min_max_normalize(array):
 
     if array.size == 0:
@@ -104,6 +138,67 @@ def min_max_normalize(array):
 
     return normalized_array
 
+def one_hot_encoder(df):
+    # Create a unique time-based identifier for grouping
+
+    df['time_id'] = pd.to_datetime(df[['year', 'month', 'day', 'hour']])
+
+    # Find unique locations
+    unique_locations = sorted(df['location'].unique())
+
+    # Map locations to indices
+    location_to_index = {loc: i for i, loc in enumerate(unique_locations)}
+
+    # Group by the unique time identifier
+    grouped = df.groupby('time_id')
+
+    # Build the result DataFrame
+    result = []
+    for time_id, group in grouped:
+        # Initialize a zero vector for one-hot encoding
+        one_hot_vector = np.zeros(len(unique_locations), dtype=int)
+        # Set 1 for each unique location in the group
+        for loc in group['location'].unique():
+            one_hot_vector[location_to_index[loc]] = 1
+        # Add the row to the result
+        row = {
+            'hour': group['hour'].iloc[0],
+            'day': group['day'].iloc[0],
+            'month': group['month'].iloc[0],
+            'year': group['year'].iloc[0]
+        }
+        # Add one-hot vector as columns
+        row.update({f'loc_{loc}': val for loc, val in zip(unique_locations, one_hot_vector)})
+        result.append(row)
+
+    # Convert result to DataFrame
+    result_df = pd.DataFrame(result)
+
+    # Create a shifted DataFrame for labels
+    labels = []
+    for time_id, group in grouped:
+        next_time_id = time_id + pd.Timedelta(hours=1)
+        # Check if next_time_id exists
+        if next_time_id in grouped.groups:
+            next_group = grouped.get_group(next_time_id)
+            # Create a one-hot vector for the labels
+            one_hot_vector = np.zeros(len(unique_locations), dtype=int)
+            for loc in next_group['location'].unique():
+                one_hot_vector[location_to_index[loc]] = 1
+        else:
+            # No next hour: all zeros
+            one_hot_vector = np.zeros(len(unique_locations), dtype=int)
+        # Add the label row
+        label_row = {'time_id': time_id}
+        label_row.update({f'label_loc_{loc}': val for loc, val in zip(unique_locations, one_hot_vector)})
+        labels.append(label_row)
+
+    # Convert labels to DataFrame
+    labels_df = pd.DataFrame(labels)
+
+    return result_df, labels_df
+
+
 
 def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size):
 
@@ -111,8 +206,11 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     # article_embedding_model = ArticleEmbeddingNet()
     # articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
 
+    # get unique row for each hour and date with a one-hot enconding:
+    threats_df, labels_df = one_hot_encoder(threats_df)
+
     # articles_np = articles_df.to_numpy()
-    threats_np = threats_df.to_numpy()
+    threats_np, labels_np = threats_df.to_numpy(), labels_df.to_numpy()
 
     # articles_np = min_max_normalize(articles_np)
     threats_np = min_max_normalize(threats_np)
@@ -122,13 +220,14 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     # articles_val, articles_test = train_test_split(articles_temp, test_size=(1 / 3), random_state=42)
 
     # Split threats into train, test, validation sets
-    threats_train, threats_temp = train_test_split(threats_np, test_size=0.3, random_state=42)
-    threats_val, threats_test = train_test_split(threats_temp, test_size=(1 / 3), random_state=42)
+    threats_train, threats_temp, labels_train, labels_temp = train_test_split(threats_np, labels_np, test_size=0.3, random_state=42)
+    threats_val, threats_test, labels_val, labels_test = train_test_split(threats_temp, labels_temp, test_size=(1 / 3), random_state=42)
+
 
     # Articles Dataloader:
-    # articles_train_ds = ArticlesDataset(articles_train, articles_seqlen)
-    # articles_val_ds = ArticlesDataset(articles_val, articles_seqlen)
-    # articles_test_ds = ArticlesDataset(articles_test, articles_seqlen)
+    # articles_train_ds = ArticlesDataset(articles_train, threats_df[['date', 'hour']], articles_seqlen)
+    # articles_val_ds = ArticlesDataset(articles_val,threats_df[['date', 'hour']], articles_seqlen)
+    # articles_test_ds = ArticlesDataset(articles_test, threats_df[['date', 'hour']], articles_seqlen)
 
     # articles_train_dl = DataLoader(articles_train_ds, batch_size=batch_size, shuffle=True)
     # articles_val_dl = DataLoader(articles_val_ds, batch_size=batch_size, shuffle=False)
@@ -139,9 +238,9 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     articles_test_dl = []
 
     # Threats Dataloader:
-    threats_train_ds = ThreatsDataset(threats_train, threats_seqlen)
-    threats_val_ds = ThreatsDataset(threats_val, threats_seqlen)
-    threats_test_ds = ThreatsDataset(threats_test, threats_seqlen)
+    threats_train_ds = ThreatsDataset(threats_train, labels_train, threats_seqlen)
+    threats_val_ds = ThreatsDataset(threats_val, labels_val, threats_seqlen)
+    threats_test_ds = ThreatsDataset(threats_test, labels_test, threats_seqlen)
 
     threats_train_dl = DataLoader(threats_train_ds, batch_size=batch_size, shuffle=True)
     threats_val_dl = DataLoader(threats_val_ds, batch_size=batch_size, shuffle=False)

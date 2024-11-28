@@ -15,21 +15,21 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
         df = df.iloc[::-1].reset_index(drop=True)
 
         # Filter rows
-        df = df[df['Location'].isin(locations_to_keep)]
-        df = df[df['Type'].isin(types_to_keep)]
+        df = df[df['location'].isin(locations_to_keep)]
+        df = df[df['type'].isin(types_to_keep)]
 
         # Modify the Time column to keep only the hour and convert it to a number
-        df['Time'] = df['Time'].str.split(':').str[0].astype(int)
+        df['hour'] = df['hour'].str.split(':').str[0].astype(int)
 
         # Transform Locations into numbers
-        unique_locations = df['Location'].unique()
+        unique_locations = df['location'].unique()
         location_mapping = {location: idx + 1 for idx, location in enumerate(unique_locations)}
-        df['Location'] = df['Location'].map(location_mapping)
+        df['location'] = df['location'].map(location_mapping)
 
         # Transform Type column into numbers
-        unique_types = df['Type'].unique()
+        unique_types = df['type'].unique()
         type_mapping = {type_: idx + 1 for idx, type_ in enumerate(unique_types)}
-        df['Type'] = df['Type'].map(type_mapping)
+        df['type'] = df['type'].map(type_mapping)
 
         # Transform Day column into numbers representing days of the week
         day_mapping = {
@@ -41,13 +41,13 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
             'שישי': 6,   # Friday
             'שבת': 7     # Saturday
         }
-        df['Day'] = df['Day'].map(day_mapping)
+        df['week day'] = df['week day'].map(day_mapping)
 
         # Split the Date column into day, month, and year components and convert them to integers
-        df['Day_of_Month'] = pd.to_datetime(df['Date'], format='%d.%m.%Y').dt.day.astype(int)
-        df['Month'] = pd.to_datetime(df['Date'], format='%d.%m.%Y').dt.month.astype(int)
-        df['Year'] = pd.to_datetime(df['Date'], format='%d.%m.%Y').dt.year.astype(int)
-        df = df.drop(columns=['Date'])
+        df['day'] = pd.to_datetime(df['date'], format='%d.%m.%Y').dt.day.astype(int)
+        df['month'] = pd.to_datetime(df['date'], format='%d.%m.%Y').dt.month.astype(int)
+        df['year'] = pd.to_datetime(df['date'], format='%d.%m.%Y').dt.year.astype(int)
+        df = df.drop(columns=['date'])
 
         # Reset index to start from 0 again
         df.reset_index(drop=True, inplace=True)
