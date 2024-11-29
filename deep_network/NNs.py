@@ -6,17 +6,24 @@ from transformer_block import TransformerBlock
 
 
 class ArticlesNN(nn.Module):
-    def __init__(self, seq_len, emb_dim=1541, n_heads=1, n_layers=1, hidden_dim=512):
+    def __init__(self, seq_len, emb_dim=1541, n_heads=4, n_layers=1, hidden_dim=512):
         super(ArticlesNN, self).__init__()
         self.n_layers = n_layers
         self.seq_len = seq_len
-        self.positional_encoding = nn.Parameter(torch.randn(seq_len, emb_dim))
-        self.transformer = TransformerBlock(emb_dim, hidden_dim, n_heads, hidden_dim)
+
+        self.projection_layer = nn.Linear(emb_dim, 1544)
+        self.positional_encoding = nn.Parameter(torch.randn(seq_len, 1544))
+        self.transformers = nn.Sequential(
+            TransformerBlock(1544, hidden_dim, n_heads, hidden_dim),
+            TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim),
+            TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim)
+        )
 
 
     def forward(self, x):
         # x shape: (batch_size, seq_length, input_dim)
         # Adding positional encoding
+        x = self.projection_layer(x)
         x = x + self.positional_encoding.unsqueeze(0)  # Broadcasting for batch
 
         # Permute dimensions for transformer compatibility
@@ -24,7 +31,7 @@ class ArticlesNN(nn.Module):
         x = x.permute(1, 0, 2)
 
         # Transformer encoder
-        x = self.transformer(x)  # shape: (seq_length, batch_size, embedding_dim)
+        x = self.transformers(x)  # shape: (seq_length, batch_size, embedding_dim)
 
         # Permute back to original dimension format
         x = x.permute(1, 0, 2)  # shape: (batch_size, seq_length, embedding_dim)
@@ -41,7 +48,11 @@ class ThreatsNN(nn.Module):
         self.embedding = nn.Linear(input_dim, emb_dim)
         # Positional encoding to retain information about the position of each element in the sequence
         self.positional_encoding = nn.Parameter(torch.randn(seq_len, emb_dim))
-        self.transformer = TransformerBlock(emb_dim, hidden_dim, n_heads, hidden_dim)
+        self.transformers = nn.Sequential(
+            TransformerBlock(emb_dim, hidden_dim, n_heads, hidden_dim),
+            TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim),
+            TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim)
+        )
 
     def forward(self, x):
         # x shape: (batch_size, seq_length, input_dim)
@@ -56,7 +67,7 @@ class ThreatsNN(nn.Module):
         x = x.permute(1, 0, 2)
 
         # Transformer encoder
-        x = self.transformer(x)  # shape: (seq_length, batch_size, embedding_dim)
+        x = self.transformers(x)  # shape: (seq_length, batch_size, embedding_dim)
 
         # Permute back to original dimension format
         x = x.permute(1, 0, 2)  # shape: (batch_size, seq_length, embedding_dim)
@@ -72,12 +83,15 @@ class CombinedNN(nn.Module):
         self.cross_attention_2 = nn.MultiheadAttention(embed_dim=emb_dim, num_heads=num_heads, batch_first=True)
 
         # Linear layers for further processing after concatenation
-        self.linear1 = nn.Linear((seq_len1+seq_len2) * hidden_dim, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, output_size)
-
-        # Activation functions
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
+        self.fc = nn.Sequential(
+            nn.Linear((seq_len1 + seq_len2) * hidden_dim, 4 * hidden_dim),
+            nn.ReLU(),
+            nn.Linear(4 * hidden_dim, 2 * hidden_dim),
+            nn.ReLU(),
+            nn.Linear(2*hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim,output_size)
+        )
 
     def forward(self, seq1, seq2):
         # seq1: (batch_size, sequence_length_1, embed_dim)
@@ -94,12 +108,7 @@ class CombinedNN(nn.Module):
         x = concat_output.view(-1, (seq1.size(1) + seq2.size(1)) * seq1.size(2))
 
         # Pass through linear layers
-        x = self.linear1(x)  # (batch_size, sequence_length_1, hidden_dim)
-        x = self.relu(x)
-        x = self.linear2(x)  # (batch_size, sequence_length_1, output_size)
-
-        # Apply sigmoid activation to the final output
-        output = self.sigmoid(x)  # (batch_size, sequence_length_1, output_size)
+        output = self.fc(x)  # (batch_size, sequence_length_1, hidden_dim)
 
         return output
 

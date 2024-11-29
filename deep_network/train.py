@@ -4,7 +4,8 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import scipy.io
 import os
-
+import torch.nn.functional as F
+import sys
 
 from torch.optim.lr_scheduler import StepLR
 from pynput import keyboard
@@ -12,15 +13,23 @@ from pynput import keyboard
 stop_training = False
 
 
+def calc_pos_weight(dl_train):
+    num_ones = 0
+    num_zeros = 0
+    for (_, _, labels) in dl_train:
+        num_ones += (labels == 1).sum().item()
+        num_zeros += (labels == 0).sum().item()
+
+    pos_weight = num_zeros / num_ones
+    print(pos_weight)
+    return torch.tensor([pos_weight])
+
+
+
 def on_press(key):
-    global stop_training, esc_pressed, five_pressed
+    global stop_training
     try:
         if key == keyboard.Key.esc:
-            esc_pressed = True
-        elif key == keyboard.KeyCode(char='5'):
-            five_pressed = True
-
-        if esc_pressed and five_pressed:
             stop_training = True
             print("\nTraining interrupted by user.")
             return False
@@ -33,7 +42,7 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
 
     # Load models from a specific run if specified
     if load_run is not None:
-        run_folder = f'results/run_{load_run}'
+        run_folder = f'C:/Users/alon.zuaretz/Documents/GitHub/rockets-threat-prediction/results/run_{load_run}'
         if os.path.exists(run_folder):
             articles_NN.load_state_dict(torch.load(os.path.join(run_folder, 'best_model.pth'))['articles_NN'])
             threats_NN.load_state_dict(torch.load(os.path.join(run_folder, 'best_model.pth'))['threats_NN'])
@@ -46,28 +55,30 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
     threats_NN.train()
     combined_NN.train()
 
-    criterion = nn.BCELoss(reduction='mean')
+    pos_weight = calc_pos_weight(dl_train)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.Adam(list(articles_NN.parameters()) + list(threats_NN.parameters()) + list(combined_NN.parameters()), lr=lr)
-    scheduler = StepLR(optimizer, step_size=20, gamma=0.5)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
 
     avg_loss_list = []
     avg_diff_loss_list = []
     val_loss_list = []
     val_avg_diff_list = []
     val_avg_class_list = []
+    val_true_positive_list = []
     best_loss = float('inf')
     best_model = None
 
     # Create results directory if it doesn't exist
-    if not os.path.exists('results'):
-        os.makedirs('results')
+    if not os.path.exists(f'C:/Users/alon.zuaretz/Documents/GitHub/rockets-threat-prediction/results'):
+        os.makedirs(f'C:/Users/alon.zuaretz/Documents/GitHub/rockets-threat-prediction/results')
 
     # Find the next available folder number
     folder_num = 1
-    while os.path.exists(f'results/run_{folder_num}'):
+    while os.path.exists(f'C:/Users/alon.zuaretz/Documents/GitHub/rockets-threat-prediction/results/run_{folder_num}'):
         folder_num += 1
 
-    result_folder = f'results/run_{folder_num}'
+    result_folder = f'C:/Users/alon.zuaretz/Documents/GitHub/rockets-threat-prediction/results/run_{folder_num}'
     os.makedirs(result_folder)
 
     listener = keyboard.Listener(on_press=on_press)
@@ -131,7 +142,7 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
         print(f"Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}, Avg Difference Loss: {avg_diff_loss:.4f}, Time: {epoch_duration:.2f} seconds")
 
         # Validation every epoch
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % 1 == 0:
             articles_NN.eval()
             threats_NN.eval()
             combined_NN.eval()
@@ -139,6 +150,7 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             val_diff_loss = 0.0
             val_class_correct = 0
             val_total = 0
+            val_true_positive = 0
             val_batches = 0
 
             val_outputs = []
@@ -167,6 +179,9 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
                     val_class_correct += (predicted_classes == labels).sum().item()
                     val_total += labels.numel()
 
+                    # Calculate true positives (how many of the ones in the labels were correctly predicted)
+                    val_true_positive += ((predicted_classes == 1) & (labels == 1)).sum().item()
+
                     val_batches += 1
 
                     val_outputs.extend(outputs.detach().cpu().numpy())
@@ -179,8 +194,10 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             val_loss_list.append(avg_val_loss)
             val_avg_diff_list.append(avg_val_diff)
             val_avg_class_list.append(val_accuracy)
+            val_true_positive_list.append(val_true_positive)
 
-            print(f"Validation Loss after Epoch [{epoch + 1}]: {avg_val_loss:.4f}, Avg Difference Loss: {avg_val_diff:.4f}, Classification Accuracy: {val_accuracy:.4f}")
+            print(f"Validation Loss after Epoch [{epoch + 1}]: {avg_val_loss:.4f}, Avg Difference Loss: {avg_val_diff:.4f},"
+                  f" Classification Accuracy: {val_accuracy:.4f}, True Positives: {val_true_positive}")
 
             articles_NN.train()
             threats_NN.train()
@@ -200,7 +217,8 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
         'avg_diff_loss': avg_diff_loss_list,
         'val_loss': val_loss_list,
         'val_avg_diff': val_avg_diff_list,
-        'val_avg_class': val_avg_class_list
+        'val_avg_class': val_avg_class_list,
+        'val_true_positive': val_true_positive_list
     })
     print(f"Loss data saved to '{os.path.join(result_folder, 'loss_data.mat')}'")
 
@@ -217,20 +235,6 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
         'val_labels': val_labels
     })
     print(f"Validation outputs vs labels saved to '{os.path.join(result_folder, f'outputs_vs_labels_val.mat')}'")
-
-    # Plot the loss graphs
-    plt.figure()
-    plt.plot(range(1, len(avg_loss_list) + 1), avg_loss_list, label='Average BCE Loss')
-    plt.plot(range(1, len(avg_diff_loss_list) + 1), avg_diff_loss_list, label='Average Difference Loss')
-    plt.plot(range(1, len(val_loss_list) + 1), val_loss_list, label='Validation Loss')
-    plt.plot(range(1, len(val_avg_diff_list) + 1), val_avg_diff_list, label='Validation Avg Difference Loss')
-    plt.plot(range(1, len(val_avg_class_list) + 1), val_avg_class_list, label='Validation Classification Accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss/Accuracy')
-    plt.legend()
-    plt.title('Training and Validation Metrics over Epochs')
-    plt.savefig(os.path.join(result_folder, 'loss_plot.png'))
-    plt.show()
 
     print("Training complete.")
     return

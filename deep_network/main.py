@@ -7,18 +7,16 @@ from train import train_model
 
 
 if __name__ == "__main__":
-    # Data Acquisition
-    articles_csv_path = 'articles.csv'  # Path to CSV file containing articles (Title, Body, Day, Hour)
-    threats_csv_path = 'threats.csv'  # Path to CSV file containing threats data
 
     articles_df, threats_df, num_locations = read_from_csv()
     print(num_locations)
+
     # Set hyper-parameters
     articles_seqlen = 20
-    threats_seqlen = 30
-    batch_size = 8
+    threats_seqlen = 60
+    batch_size = 16
     num_epochs = 100
-    lr = 1e-4
+    lr = 5e-4
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

@@ -22,6 +22,11 @@ def main():
         "pandas",
         "torch",
         "transformers",
+        "selenium",
+        "bs4",
+        "matplotlib",
+        "scikit-learn",
+        "pynput"
     ]
 
     install_packages(packages)

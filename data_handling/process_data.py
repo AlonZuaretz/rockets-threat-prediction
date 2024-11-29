@@ -187,7 +187,7 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     # Pass articles through an LLM to get embeddings:
     # article_embedding_model = ArticleEmbeddingNet()
     # articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
-    articles_df = pd.read_csv('Data/embedded_articles.csv')
+    articles_df = pd.read_csv(r'C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles.csv')
 
     # get unique row for each hour and date with a one-hot enconding:
     threats_df, labels_df, time_id_df = one_hot_encoder(threats_df)
@@ -196,8 +196,8 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     threats_np, labels_np = threats_df.to_numpy(), labels_df.to_numpy()
 
     # Min Max normalize each column separately
-    # articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
-    # threats_np = min_max_normalize(threats_np)
+    articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
+    threats_np = min_max_normalize(threats_np)
 
     # Split the embedded strings into long rows:
     main_titles = articles_np[:, 7]
