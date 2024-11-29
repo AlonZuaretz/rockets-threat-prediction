@@ -13,7 +13,7 @@ def read_from_csv():
     threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
     # locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
     #                      "תל אביב - מרכז העיר"]
-    locations_to_keep = 50 # locations that appear more than 50 times will remain in data set
+    locations_to_keep = 100 # locations that appear more than 50 times will remain in data set
 
     types_to_keep = ["ירי רקטות וטילים"]
     threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_to_keep,
@@ -53,7 +53,6 @@ def read_preprocess_articles():
     }
     date_time_df['week day'] = date_time_df['week day'].map(day_mapping)
 
-
     # Combine all data into a single DataFrame
     combined_df = pd.merge(date_time_df, main_titles_df, on='Sample_Number')
     combined_df = pd.merge(combined_df, sub_titles_df, on='Sample_Number')
@@ -82,8 +81,6 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
 
         # df = df[df['location'].isin(locations_to_keep)]
         # df = df[df['type'].isin(types_to_keep)]
-
-
 
         # Modify the Time column to keep only the hour and convert it to a number
         df['hour'] = df['hour'].str.split(':').str[0].astype(int)

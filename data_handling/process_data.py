@@ -45,37 +45,55 @@ class ArticleEmbeddingNet(nn.Module):
 
 class CreateDataSet(Dataset):
     def __init__(self, ds1, ds2, labels, last_time, seq_len1, seq_len2):
-        self.ds1 = ds1 # Articles
-        self.ds2 = ds2 # Threats
+        self.ds1 = ds1  # Articles
+        self.ds2 = ds2  # Threats
         self.labels = labels
         self.last_time = last_time
         self.seq_len1 = seq_len1
         self.seq_len2 = seq_len2
+        self.cache = {}  # Cache to store the index of the last match
 
     def __len__(self):
         return len(self.ds2)
 
     def __getitem__(self, idx):
-        # Get the sequence from the first dataset based on its sequence length
+        # Get the sequence from the second dataset based on its sequence length
         seq2 = self.ds2[idx][:][:]
 
         # Find the last timestamp of the current sequence from dataset1
         last_time = self.last_time[idx]  # Assuming time is the first element in each sample
 
-        # Find the corresponding sequence in the second dataset ending with last_time
+        # Find the corresponding sequence in the first dataset ending with last_time
         seq1 = self.find_corresponding_sequence(last_time)
+        if seq1.shape[0] == 0:
+            x=5
+
 
         label = self.labels[idx, :]
 
         return seq1, seq2, label
 
     def find_corresponding_sequence(self, last_time):
-        # Find the sequence in dataset2 that ends with the given time
-        for (idx, time) in enumerate(self.ds1[:, 0]):
-            if time > last_time:
-                idx = idx - 1
-                return self.ds1[idx - self.seq_len1:idx, 1:]
-        raise ValueError(f"No corresponding sequence found in dataset2 for time {last_time}")
+        # Check if the last_time is already in the cache
+        if last_time in self.cache:
+            idx = self.cache[last_time]
+        else:
+            # Find the sequence in dataset1 that ends with the given time
+            idx = None
+            for (i, time) in enumerate(self.ds1[:, 0]):
+                if time > last_time:
+                    idx = i
+                    break
+
+            if idx is None:
+                raise ValueError(f"No corresponding sequence found in dataset1 for time {last_time}")
+
+            # Cache the index for future use
+            self.cache[last_time] = idx
+
+        # Return the sequence from dataset1 based on the cached or newly found index
+        return self.ds1[idx - self.seq_len1:idx, 1:]
+
 
 def min_max_normalize(array):
 
@@ -178,8 +196,8 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     threats_np, labels_np = threats_df.to_numpy(), labels_df.to_numpy()
 
     # Min Max normalize each column separately
-    articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
-    threats_np = min_max_normalize(threats_np)
+    # articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
+    # threats_np = min_max_normalize(threats_np)
 
     # Split the embedded strings into long rows:
     main_titles = articles_np[:, 7]
@@ -202,10 +220,26 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     labels = np.zeros((num_sequences, labels_dim), dtype=np.float32)
     last_time = np.zeros(num_sequences)
 
+    # for i in range(0, num_sequences, 1):
+    #     threats_sequences[i, :, :] = threats_np[i: i + threats_seqlen, :]
+    #     labels[i, :] = labels_np[i, :]
+    #     last_time[i] = int(time_id_df[i].timestamp())
+
+    # for i in range(threats_seqlen, len(threats_np) + 1, 1):
+    #     threats_sequences[i - threats_seqlen, :, :] = threats_np[i - threats_seqlen: i, :]
+    #     labels[i - threats_seqlen, :] = labels_np[i-1, :]
+    #     last_time[i - threats_seqlen] = int(time_id_df[i-1].timestamp())
+
     for i in range(0, num_sequences, 1):
-        threats_sequences[i, :, :] = threats_np[i: i + threats_seqlen, :]
-        labels[i, :] = labels_np[i, :]
-        last_time[i] = int(time_id_df[i].timestamp())
+        threats_sequences[i, :, :] = threats_np[i:i+threats_seqlen, :]
+        labels[i, :] = labels_np[i+threats_seqlen-1, :]
+        last_time[i] = int(time_id_df[i+threats_seqlen-1].timestamp())
+
+    # Check if label is present in the sequence:
+    # sequence = threats_sequences[6, :, 5:]
+    # label = labels[6, :]
+    # np.sum(np.abs(sequence-label), axis=1)
+
 
     # Split threats into train, test, validation sets
     threats_train, threats_temp, labels_train, labels_temp, last_time_train, last_time_temp = train_test_split(
@@ -213,7 +247,7 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     )
 
     threats_val, threats_test, labels_val, labels_test, last_time_val, last_time_test = train_test_split(
-        threats_temp, labels_temp, last_time_temp, test_size=(1 / 3), random_state=42
+        threats_temp, labels_temp, last_time_temp, test_size=1, random_state=42
     )
 
     # Dataset:

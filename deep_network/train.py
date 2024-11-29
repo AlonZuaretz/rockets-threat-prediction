@@ -3,10 +3,8 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import scipy.io
-import csv
 import os
-import torch.nn.functional as F
-import sys
+
 
 from torch.optim.lr_scheduler import StepLR
 from pynput import keyboard
@@ -15,9 +13,14 @@ stop_training = False
 
 
 def on_press(key):
-    global stop_training
+    global stop_training, esc_pressed, five_pressed
     try:
         if key == keyboard.Key.esc:
+            esc_pressed = True
+        elif key == keyboard.KeyCode(char='5'):
+            five_pressed = True
+
+        if esc_pressed and five_pressed:
             stop_training = True
             print("\nTraining interrupted by user.")
             return False
@@ -25,7 +28,7 @@ def on_press(key):
         print(f"Error: {e}")
 
 
-def train_model(articles_NN, threats_NN, combined_NN, dl, device, num_epochs, lr, load_run=None):
+def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, num_epochs, lr, load_run=None):
     global stop_training
 
     # Load models from a specific run if specified
@@ -49,6 +52,9 @@ def train_model(articles_NN, threats_NN, combined_NN, dl, device, num_epochs, lr
 
     avg_loss_list = []
     avg_diff_loss_list = []
+    val_loss_list = []
+    val_avg_diff_list = []
+    val_avg_class_list = []
     best_loss = float('inf')
     best_model = None
 
@@ -76,10 +82,10 @@ def train_model(articles_NN, threats_NN, combined_NN, dl, device, num_epochs, lr
         epoch_diff_loss = 0.0
         num_batches = 0
 
-        all_outputs = []
-        all_labels = []
+        train_outputs = []
+        train_labels = []
 
-        for (articles_seq, threats_seq, labels) in dl:
+        for (articles_seq, threats_seq, labels) in dl_train:
             threats_seq = threats_seq.to(device)
             articles_seq = articles_seq.to(device)
             labels = labels.to(device)
@@ -102,8 +108,8 @@ def train_model(articles_NN, threats_NN, combined_NN, dl, device, num_epochs, lr
             epoch_diff_loss += diff_loss.item()
             num_batches += 1
 
-            all_outputs.extend(outputs.detach().cpu().numpy())
-            all_labels.extend(labels.detach().cpu().numpy())
+            train_outputs.extend(outputs.detach().cpu().numpy())
+            train_labels.extend(labels.detach().cpu().numpy())
 
         avg_loss = epoch_loss / num_batches
         avg_diff_loss = epoch_diff_loss / num_batches
@@ -124,6 +130,62 @@ def train_model(articles_NN, threats_NN, combined_NN, dl, device, num_epochs, lr
 
         print(f"Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}, Avg Difference Loss: {avg_diff_loss:.4f}, Time: {epoch_duration:.2f} seconds")
 
+        # Validation every epoch
+        if (epoch + 1) % 5 == 0:
+            articles_NN.eval()
+            threats_NN.eval()
+            combined_NN.eval()
+            val_loss = 0.0
+            val_diff_loss = 0.0
+            val_class_correct = 0
+            val_total = 0
+            val_batches = 0
+
+            val_outputs = []
+            val_labels = []
+
+            with torch.no_grad():
+                for (articles_seq, threats_seq, labels) in dl_val:
+                    threats_seq = threats_seq.to(device)
+                    articles_seq = articles_seq.to(device)
+                    labels = labels.to(device)
+
+                    articles_output = articles_NN(articles_seq)
+                    threats_output = threats_NN(threats_seq)
+
+                    outputs = combined_NN(articles_output, threats_output)
+
+                    loss = criterion(outputs, labels)
+                    val_loss += loss.item()
+
+                    # Calculate average difference loss (MAE)
+                    diff_loss = torch.mean(torch.abs(outputs - labels))
+                    val_diff_loss += diff_loss.item()
+
+                    # Classify outputs around 0.5
+                    predicted_classes = (outputs >= 0.5).float()
+                    val_class_correct += (predicted_classes == labels).sum().item()
+                    val_total += labels.numel()
+
+                    val_batches += 1
+
+                    val_outputs.extend(outputs.detach().cpu().numpy())
+                    val_labels.extend(labels.detach().cpu().numpy())
+
+            avg_val_loss = val_loss / val_batches
+            avg_val_diff = val_diff_loss / val_batches
+            val_accuracy = val_class_correct / val_total
+
+            val_loss_list.append(avg_val_loss)
+            val_avg_diff_list.append(avg_val_diff)
+            val_avg_class_list.append(val_accuracy)
+
+            print(f"Validation Loss after Epoch [{epoch + 1}]: {avg_val_loss:.4f}, Avg Difference Loss: {avg_val_diff:.4f}, Classification Accuracy: {val_accuracy:.4f}")
+
+            articles_NN.train()
+            threats_NN.train()
+            combined_NN.train()
+
         # Step the scheduler
         scheduler.step()
 
@@ -133,27 +195,42 @@ def train_model(articles_NN, threats_NN, combined_NN, dl, device, num_epochs, lr
         print(f"Best model saved as '{os.path.join(result_folder, 'best_model.pth')}'")
 
     # Save losses to .mat file
-    scipy.io.savemat(os.path.join(result_folder, 'loss_data.mat'), {'avg_loss': avg_loss_list, 'avg_diff_loss': avg_diff_loss_list})
+    scipy.io.savemat(os.path.join(result_folder, 'loss_data.mat'), {
+        'avg_loss': avg_loss_list,
+        'avg_diff_loss': avg_diff_loss_list,
+        'val_loss': val_loss_list,
+        'val_avg_diff': val_avg_diff_list,
+        'val_avg_class': val_avg_class_list
+    })
     print(f"Loss data saved to '{os.path.join(result_folder, 'loss_data.mat')}'")
+
+    # Save outputs vs labels to .mat file
+    scipy.io.savemat(os.path.join(result_folder, 'outputs_vs_labels_train.mat'), {
+        'train_outputs': train_outputs,
+        'train_labels': train_labels
+    })
+    print(f"Outputs vs labels saved to '{os.path.join(result_folder, 'outputs_vs_labels_train.mat')}'")
+
+    # Save validation outputs vs labels to .mat file
+    scipy.io.savemat(os.path.join(result_folder, f'outputs_vs_labels_val.mat'), {
+        'val_outputs': val_outputs,
+        'val_labels': val_labels
+    })
+    print(f"Validation outputs vs labels saved to '{os.path.join(result_folder, f'outputs_vs_labels_val.mat')}'")
 
     # Plot the loss graphs
     plt.figure()
     plt.plot(range(1, len(avg_loss_list) + 1), avg_loss_list, label='Average BCE Loss')
     plt.plot(range(1, len(avg_diff_loss_list) + 1), avg_diff_loss_list, label='Average Difference Loss')
+    plt.plot(range(1, len(val_loss_list) + 1), val_loss_list, label='Validation Loss')
+    plt.plot(range(1, len(val_avg_diff_list) + 1), val_avg_diff_list, label='Validation Avg Difference Loss')
+    plt.plot(range(1, len(val_avg_class_list) + 1), val_avg_class_list, label='Validation Classification Accuracy')
     plt.xlabel('Epoch')
-    plt.ylabel('Loss')
+    plt.ylabel('Loss/Accuracy')
     plt.legend()
-    plt.title('Training Loss over Epochs')
+    plt.title('Training and Validation Metrics over Epochs')
     plt.savefig(os.path.join(result_folder, 'loss_plot.png'))
     plt.show()
-
-    # Save outputs vs labels to CSV
-    with open(os.path.join(result_folder, 'outputs_vs_labels.csv'), mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Output', 'Label'])
-        for output, label in zip(all_outputs, all_labels):
-            writer.writerow([output, label])
-    print(f"Outputs vs labels saved to '{os.path.join(result_folder, 'outputs_vs_labels.csv')}'")
 
     print("Training complete.")
     return

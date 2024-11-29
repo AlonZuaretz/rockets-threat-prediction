@@ -31,4 +31,4 @@ if __name__ == "__main__":
     combined_model = CombinedNN(articles_seqlen, threats_seqlen, output_size=num_locations).to(device)
 
     # Train the model
-    train_model(articles_model, threats_model, combined_model, train_dl, device, num_epochs, lr)
+    train_model(articles_model, threats_model, combined_model, train_dl, val_dl, device, num_epochs, lr)
