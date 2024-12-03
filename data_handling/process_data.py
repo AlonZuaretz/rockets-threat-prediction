@@ -81,7 +81,7 @@ class CreateDataSet(Dataset):
             # Find the sequence in dataset1 that ends with the given time
             idx = None
             for (i, time) in enumerate(self.ds1[:, 0]):
-                if time > last_time:
+                if time > last_time + 21600:
                     idx = i
                     break
 
@@ -158,7 +158,7 @@ def one_hot_encoder(df):
     # Create a shifted DataFrame for labels
     labels = []
     for time_id, group in grouped:
-        next_time_id = time_id + pd.Timedelta(hours=1)
+        next_time_id = time_id + pd.Timedelta(hours=6)
         # Check if next_time_id exists
         if next_time_id in grouped.groups:
             next_group = grouped.get_group(next_time_id)
@@ -187,7 +187,7 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     # Pass articles through an LLM to get embeddings:
     # article_embedding_model = ArticleEmbeddingNet()
     # articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
-    articles_df = pd.read_csv(r'C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles.csv')
+    articles_df = pd.read_csv(r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles.csv")
 
     # get unique row for each hour and date with a one-hot enconding:
     threats_df, labels_df, time_id_df = one_hot_encoder(threats_df)
@@ -196,8 +196,8 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     threats_np, labels_np = threats_df.to_numpy(), labels_df.to_numpy()
 
     # Min Max normalize each column separately
-    articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
-    threats_np = min_max_normalize(threats_np)
+    # articles_np[:, 2:7] = min_max_normalize(articles_np[:, 2:7])
+    # threats_np = min_max_normalize(threats_np)
 
     # Split the embedded strings into long rows:
     main_titles = articles_np[:, 7]
@@ -220,26 +220,10 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     labels = np.zeros((num_sequences, labels_dim), dtype=np.float32)
     last_time = np.zeros(num_sequences)
 
-    # for i in range(0, num_sequences, 1):
-    #     threats_sequences[i, :, :] = threats_np[i: i + threats_seqlen, :]
-    #     labels[i, :] = labels_np[i, :]
-    #     last_time[i] = int(time_id_df[i].timestamp())
-
-    # for i in range(threats_seqlen, len(threats_np) + 1, 1):
-    #     threats_sequences[i - threats_seqlen, :, :] = threats_np[i - threats_seqlen: i, :]
-    #     labels[i - threats_seqlen, :] = labels_np[i-1, :]
-    #     last_time[i - threats_seqlen] = int(time_id_df[i-1].timestamp())
-
     for i in range(0, num_sequences, 1):
         threats_sequences[i, :, :] = threats_np[i:i+threats_seqlen, :]
         labels[i, :] = labels_np[i+threats_seqlen-1, :]
         last_time[i] = int(time_id_df[i+threats_seqlen-1].timestamp())
-
-    # Check if label is present in the sequence:
-    # sequence = threats_sequences[6, :, 5:]
-    # label = labels[6, :]
-    # np.sum(np.abs(sequence-label), axis=1)
-
 
     # Split threats into train, test, validation sets
     threats_train, threats_temp, labels_train, labels_temp, last_time_train, last_time_temp = train_test_split(

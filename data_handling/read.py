@@ -10,7 +10,8 @@ def read_from_csv():
     articles_df = [] #read_preprocess_articles()
 
     # Threats
-    threats_csv_path = r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\combined_output_no_dups_Time_rounded_v4.csv"
+    # threats_csv_path = r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\combined_output_no_dups_Time_rounded_v4.csv"
+    threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
     # locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
     #                      "תל אביב - מרכז העיר"]
     locations_to_keep = 200 # locations that appear more than 50 times will remain in data set
@@ -61,6 +62,18 @@ def read_preprocess_articles():
 
     return combined_df
 
+def group_time(hour_str):
+    hour = int(hour_str.split(':')[0])  # Extract the hour
+    if 0 <= hour < 6:
+        return 0
+    elif 6 <= hour < 12:
+        return 6
+    elif 12 <= hour < 18:
+        return 12
+    else:
+        return 18
+
+
 
 def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
         # Read the CSV file with UTF-8 encoding, which supports Hebrew
@@ -82,8 +95,7 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
         # df = df[df['location'].isin(locations_to_keep)]
         # df = df[df['type'].isin(types_to_keep)]
 
-        # Modify the Time column to keep only the hour and convert it to a number
-        df['hour'] = df['hour'].str.split(':').str[0].astype(int)
+        df['hour'] = df['hour'].apply(group_time)
 
         # Transform Locations into numbers
         unique_locations = df['location'].unique()

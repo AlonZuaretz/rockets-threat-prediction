@@ -16,9 +16,8 @@ def install_packages(packages):
 
 
 def main():
-    # List your packages here
     packages = [
-        "numpy",  # Example package, you can add more
+        "numpy",
         "pandas",
         "torch",
         "transformers",
