@@ -84,6 +84,12 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
 
+    num_of_ones = torch.zeros(1)
+    num_of_zeros = torch.zeros(1)
+    for articles_seq, threats_seq, labels in dl_val:
+        num_of_ones += labels.sum()
+        num_of_zeros += (labels.shape[0] * labels.shape[1] - labels.sum())
+
     for epoch in range(num_epochs):
         if stop_training:
             break
@@ -104,12 +110,12 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             articles_output = articles_NN(articles_seq)
             threats_output = threats_NN(threats_seq)
 
-            outputs = combined_NN(articles_output, threats_output)
+            outputs, normalized_outputs = combined_NN(articles_output, threats_output)
 
             loss = criterion(outputs, labels)
 
             # Calculate average difference loss
-            diff_loss = torch.mean(torch.abs(outputs - labels))
+            diff_loss = torch.mean(torch.abs(normalized_outputs - labels))
 
             optimizer.zero_grad()
             loss.backward()
@@ -119,7 +125,7 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             epoch_diff_loss += diff_loss.item()
             num_batches += 1
 
-            train_outputs.extend(outputs.detach().cpu().numpy())
+            train_outputs.extend(normalized_outputs.detach().cpu().numpy())
             train_labels.extend(labels.detach().cpu().numpy())
 
         avg_loss = epoch_loss / num_batches
@@ -151,13 +157,14 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             val_class_correct = 0
             val_total = 0
             val_true_positive = 0
+            val_true_negative = 0
             val_batches = 0
 
             val_outputs = []
             val_labels = []
 
             with torch.no_grad():
-                for (articles_seq, threats_seq, labels) in dl_val:
+                for articles_seq, threats_seq, labels in dl_val:
                     threats_seq = threats_seq.to(device)
                     articles_seq = articles_seq.to(device)
                     labels = labels.to(device)
@@ -165,26 +172,26 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
                     articles_output = articles_NN(articles_seq)
                     threats_output = threats_NN(threats_seq)
 
-                    outputs = combined_NN(articles_output, threats_output)
+                    outputs, normalized_outputs = combined_NN(articles_output, threats_output)
 
                     loss = criterion(outputs, labels)
                     val_loss += loss.item()
 
                     # Calculate average difference loss (MAE)
-                    diff_loss = torch.mean(torch.abs(outputs - labels))
+                    diff_loss = torch.mean(torch.abs(normalized_outputs - labels))
                     val_diff_loss += diff_loss.item()
 
                     # Classify outputs around 0.5
-                    predicted_classes = (outputs >= 0.5).float()
+                    predicted_classes = (normalized_outputs >= 0.5).float()
                     val_class_correct += (predicted_classes == labels).sum().item()
                     val_total += labels.numel()
 
                     # Calculate true positives (how many of the ones in the labels were correctly predicted)
                     val_true_positive += ((predicted_classes == 1) & (labels == 1)).sum().item()
-
+                    val_true_negative += ((predicted_classes == 0) & (labels == 0)).sum().item()
                     val_batches += 1
 
-                    val_outputs.extend(outputs.detach().cpu().numpy())
+                    val_outputs.extend(normalized_outputs.detach().cpu().numpy())
                     val_labels.extend(labels.detach().cpu().numpy())
 
             avg_val_loss = val_loss / val_batches
@@ -196,8 +203,9 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             val_avg_class_list.append(val_accuracy)
             val_true_positive_list.append(val_true_positive)
 
-            print(f"Validation Loss after Epoch [{epoch + 1}]: {avg_val_loss:.4f}, Avg Difference Loss: {avg_val_diff:.4f},"
-                  f" Classification Accuracy: {val_accuracy:.4f}, True Positives: {val_true_positive}")
+            print(f"Validation Loss after Epoch [{epoch + 1}]: {avg_val_loss:.4f}, Avg Difference Loss: {avg_val_diff:.4f}, \n"
+                  f" Classification Accuracy: {val_accuracy:.4f}, True Positives out of all positives: {val_true_positive} / {num_of_ones} \n"
+                  f" True Negatives out of all negatives: {val_true_negative} / {num_of_zeros} \n\n")
 
             articles_NN.train()
             threats_NN.train()

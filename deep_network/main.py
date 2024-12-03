@@ -16,7 +16,7 @@ if __name__ == "__main__":
     threats_seqlen = 60
     batch_size = 16
     num_epochs = 100
-    lr = 5e-4
+    lr = 1e-3
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

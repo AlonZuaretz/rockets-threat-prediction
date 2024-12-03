@@ -6,7 +6,7 @@ from transformer_block import TransformerBlock
 
 
 class ArticlesNN(nn.Module):
-    def __init__(self, seq_len, emb_dim=1541, n_heads=4, n_layers=1, hidden_dim=512):
+    def __init__(self, seq_len, emb_dim=1541, n_heads=4, n_layers=1, hidden_dim=1024):
         super(ArticlesNN, self).__init__()
         self.n_layers = n_layers
         self.seq_len = seq_len
@@ -15,7 +15,7 @@ class ArticlesNN(nn.Module):
         self.positional_encoding = nn.Parameter(torch.randn(seq_len, 1544))
         self.transformers = nn.Sequential(
             TransformerBlock(1544, hidden_dim, n_heads, hidden_dim),
-            TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim),
+            # TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim),
             TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim)
         )
 
@@ -40,7 +40,7 @@ class ArticlesNN(nn.Module):
 
 
 class ThreatsNN(nn.Module):
-    def __init__(self, seq_len, input_dim=9, emb_dim=128, n_heads=4, n_layers=1, hidden_dim=512):
+    def __init__(self, seq_len, input_dim=9, emb_dim=128, n_heads=4, n_layers=1, hidden_dim=1024):
         super(ThreatsNN, self).__init__()
         self.n_layers = n_layers
         self.seq_len = seq_len
@@ -50,7 +50,7 @@ class ThreatsNN(nn.Module):
         self.positional_encoding = nn.Parameter(torch.randn(seq_len, emb_dim))
         self.transformers = nn.Sequential(
             TransformerBlock(emb_dim, hidden_dim, n_heads, hidden_dim),
-            TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim),
+            # TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim),
             TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim)
         )
 
@@ -77,7 +77,7 @@ class ThreatsNN(nn.Module):
 
 
 class CombinedNN(nn.Module):
-    def __init__(self, seq_len1, seq_len2, output_size=4, emb_dim=512, num_heads=4, hidden_dim=512):
+    def __init__(self, seq_len1, seq_len2, output_size=4, emb_dim=1024, num_heads=4, hidden_dim=1024):
         super(CombinedNN, self).__init__()
         self.cross_attention_1 = nn.MultiheadAttention(embed_dim=emb_dim, num_heads=num_heads, batch_first=True)
         self.cross_attention_2 = nn.MultiheadAttention(embed_dim=emb_dim, num_heads=num_heads, batch_first=True)
@@ -92,6 +92,8 @@ class CombinedNN(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim,output_size)
         )
+
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, seq1, seq2):
         # seq1: (batch_size, sequence_length_1, embed_dim)
@@ -109,7 +111,8 @@ class CombinedNN(nn.Module):
 
         # Pass through linear layers
         output = self.fc(x)  # (batch_size, sequence_length_1, hidden_dim)
+        normalized_output = self.sigmoid(output)
 
-        return output
+        return output, normalized_output
 
 

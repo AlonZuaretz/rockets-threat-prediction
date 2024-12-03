@@ -10,11 +10,11 @@ def read_from_csv():
     articles_df = [] #read_preprocess_articles()
 
     # Threats
-    # threats_csv_path = r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\combined_output_no_dups_Time_rounded_v4.csv"
-    threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
+    threats_csv_path = r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\combined_output_no_dups_Time_rounded_v4.csv"
+    # threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
     # locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
     #                      "תל אביב - מרכז העיר"]
-    locations_to_keep = 200 # locations that appear more than 50 times will remain in data set
+    locations_to_keep = 100 # locations that appear more than 50 times will remain in data set
 
     types_to_keep = ["ירי רקטות וטילים"]
     threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_to_keep,
