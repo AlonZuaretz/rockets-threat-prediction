@@ -7,7 +7,8 @@ from datetime import datetime
 
 def read_from_csv():
     # Articles
-    articles_df = [] #read_preprocess_articles()
+    # articles_df = read_preprocess_articles()
+    articles_df = []
 
     # Threats
     threats_csv_path = r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\combined_output_no_dups_Time_rounded_v4.csv"
@@ -24,9 +25,9 @@ def read_from_csv():
 
 
 def read_preprocess_articles():
-    date_time_file = r"Data\Ynet stuff\Ynet_Articles_Data\Full\Date_Time.txt"
-    main_titles_file = r"Data\Ynet stuff\Ynet_Articles_Data\Full\Main_Titles.txt"
-    sub_titles_file = r"Data\Ynet stuff\Ynet_Articles_Data\Full\Sub_Titles.txt"
+    date_time_file = r"Data\Date_Time.txt"
+    main_titles_file = r"Data\Main_Titles.txt"
+    sub_titles_file = r"Data\Sub_Titles.txt"
 
     # Parse each of the files
     date_time_df = parse_date_time_file(date_time_file)

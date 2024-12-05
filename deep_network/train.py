@@ -145,7 +145,10 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
         end_time = time.time()
         epoch_duration = end_time - start_time
 
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}, Avg Difference Loss: {avg_diff_loss:.4f}, Time: {epoch_duration:.2f} seconds")
+        print(f"Epoch [{epoch + 1}] Training score:\n"
+              f" Average Loss: {avg_loss:.4f}\n"
+              f" MAE: {avg_diff_loss:.4f}\n"
+              f" Time: {epoch_duration:.2f} seconds")
 
         # Validation every epoch
         if (epoch + 1) % 1 == 0:
@@ -203,9 +206,11 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
             val_avg_class_list.append(val_accuracy)
             val_true_positive_list.append(val_true_positive)
 
-            print(f"Validation Loss after Epoch [{epoch + 1}]: {avg_val_loss:.4f}, Avg Difference Loss: {avg_val_diff:.4f}, \n"
-                  f" Classification Accuracy: {val_accuracy:.4f}, True Positives out of all positives: {val_true_positive} / {num_of_ones} \n"
-                  f" True Negatives out of all negatives: {val_true_negative} / {num_of_zeros} \n\n")
+            print(f"Epoch [{epoch + 1}] Validation score:\n"
+                  f" Validation Loss  {avg_val_loss:.4f}, MAE: {avg_val_diff:.4f}, \n"
+                  f" Classification Accuracy: {val_accuracy:.4f}\n"
+                  f" True Positives out of all positives: {val_true_positive} / {num_of_ones.item()} \n"
+                  f" True Negatives out of all negatives: {val_true_negative} / {num_of_zeros.item()} \n\n")
 
             articles_NN.train()
             threats_NN.train()

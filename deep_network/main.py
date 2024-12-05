@@ -2,7 +2,7 @@ import torch
 
 from data_handling.process_data import process
 from data_handling.read import read_from_csv
-from NNs import ArticlesNN, ThreatsNN, CombinedNN
+from NNs_LSTM import ArticlesNN, ThreatsNN, CombinedNN
 from train import train_model
 
 
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     threats_seqlen = 60
     batch_size = 16
     num_epochs = 100
-    lr = 1e-3
+    lr = 5e-3
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

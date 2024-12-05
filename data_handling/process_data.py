@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from transformers import BertTokenizer, BertModel
+from transformers import BertModel, BertTokenizerFast
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from datetime import datetime
@@ -13,11 +13,12 @@ from datetime import datetime
 
 
 class ArticleEmbeddingNet(nn.Module):
-    def __init__(self, model_name='bert-base-multilingual-cased'):
+    def __init__(self, model_name='onlplab/alephbert-base'):
         super(ArticleEmbeddingNet, self).__init__()
         # Load a pretrained large language model
         self.model = BertModel.from_pretrained(model_name)
-        self.tokenizer = BertTokenizer.from_pretrained(model_name)
+        self.tokenizer = BertTokenizerFast.from_pretrained(model_name)
+        self.model.eval()
 
     def forward(self, df):
         # Load CSV and extract Title, Body, Day, and Hour
@@ -187,7 +188,8 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     # Pass articles through an LLM to get embeddings:
     # article_embedding_model = ArticleEmbeddingNet()
     # articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
-    articles_df = pd.read_csv(r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles.csv")
+    # articles_df.to_csv(r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles_alephbert.csv", index=False)
+    articles_df = pd.read_csv(r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles_alephbert.csv")
 
     # get unique row for each hour and date with a one-hot enconding:
     threats_df, labels_df, time_id_df = one_hot_encoder(threats_df)
