@@ -1,27 +1,34 @@
 import torch
+import json
 
 from data_handling.process_data import process
 from data_handling.read import read_from_csv
-from NNs_LSTM import ArticlesNN, ThreatsNN, CombinedNN
-from train import train_model
-
+from deep_network.NNs_LSTM import ArticlesNN, ThreatsNN, CombinedNN
+from deep_network.train import train_model
 
 if __name__ == "__main__":
 
-    articles_df, threats_df, num_locations = read_from_csv()
-    print(num_locations)
+    read_embedded_articles = True
+    time_resolution = 6
+    articles_df, threats_df, locations_mapping = read_from_csv(read_embedded_articles, time_resolution)
+    num_locations = len(locations_mapping)
+
+    # To save the locations mappings:
+    # with open(r"locations_dict.txt", "w", encoding="utf-8") as f:
+    #     f.write(str(locations_mapping))
 
     # Set hyper-parameters
     articles_seqlen = 20
-    threats_seqlen = 60
+    threats_seqlen = 20
     batch_size = 16
-    num_epochs = 100
-    lr = 5e-3
+    num_epochs = 30
+    lr = 1e-3
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Process data
-    train_dl, val_dl, test_dl = process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size)
+    train_dl, val_dl, test_dl = process(articles_df, threats_df,
+                                        articles_seqlen, threats_seqlen, batch_size, time_resolution)
 
     # Instantiate the models:
     articles_model = ArticlesNN(articles_seqlen).to(device)

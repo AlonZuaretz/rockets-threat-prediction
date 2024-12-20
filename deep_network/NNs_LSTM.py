@@ -88,24 +88,3 @@ class CombinedNN(nn.Module):
         normalized_output = self.sigmoid(output)
 
         return output, normalized_output
-
-
-# Example usage
-seq_len1 = 10
-seq_len2 = 15
-batch_size = 32
-
-articles_nn = ArticlesNN(seq_len=seq_len1)
-threats_nn = ThreatsNN(seq_len=seq_len2)
-combined_nn = CombinedNN(seq_len1=seq_len1, seq_len2=seq_len2)
-
-# Dummy input
-seq1 = torch.randn(batch_size, seq_len1, 1541)  # Input to ArticlesNN
-seq2 = torch.randn(batch_size, seq_len2, 9)  # Input to ThreatsNN
-
-# Forward pass
-articles_output = articles_nn(seq1)
-threats_output = threats_nn(seq2)
-output, normalized_output = combined_nn(articles_output, threats_output)
-
-print(output.shape, normalized_output.shape)

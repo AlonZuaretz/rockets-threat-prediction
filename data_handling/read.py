@@ -5,23 +5,21 @@ import re
 from datetime import datetime
 
 
-def read_from_csv():
+def read_from_csv(read_embedded_articles, time_resolution):
     # Articles
-    # articles_df = read_preprocess_articles()
-    articles_df = []
+    if not read_embedded_articles:
+        articles_df = read_preprocess_articles()
+    else:
+        articles_df = []
 
     # Threats
-    threats_csv_path = r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\combined_output_no_dups_Time_rounded_v4.csv"
-    # threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
-    # locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
-    #                      "תל אביב - מרכז העיר"]
-    locations_to_keep = 100 # locations that appear more than 50 times will remain in data set
-
+    threats_csv_path = r"Data/alerts_dataset.csv"
+    locations_threshold = 100 # locations that appear more than X times will remain in data set
     types_to_keep = ["ירי רקטות וטילים"]
-    threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_to_keep,
-                                                                         types_to_keep)
+    threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_threshold,
+                                                                         types_to_keep, time_resolution)
 
-    return articles_df, threats_df, len(location_mapping)
+    return articles_df, threats_df, location_mapping
 
 
 def read_preprocess_articles():
@@ -63,20 +61,12 @@ def read_preprocess_articles():
 
     return combined_df
 
-def group_time(hour_str):
+def group_time(hour_str, resolution):
     hour = int(hour_str.split(':')[0])  # Extract the hour
-    if 0 <= hour < 6:
-        return 0
-    elif 6 <= hour < 12:
-        return 6
-    elif 12 <= hour < 18:
-        return 12
-    else:
-        return 18
+    return (hour // resolution) * resolution
 
 
-
-def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
+def read_preprocess_threats(file_path, locations_to_keep, types_to_keep, time_resolution):
         # Read the CSV file with UTF-8 encoding, which supports Hebrew
         df = pd.read_csv(file_path, encoding='utf-8')
 
@@ -93,10 +83,8 @@ def read_preprocess_threats(file_path, locations_to_keep, types_to_keep):
         # Keep only rows with locations that appear more than X times
         df = df[df['location'].isin(locations_to_keep)]
 
-        # df = df[df['location'].isin(locations_to_keep)]
-        # df = df[df['type'].isin(types_to_keep)]
-
-        df['hour'] = df['hour'].apply(group_time)
+        # Round with the selected time resolution
+        df['hour'] = df['hour'].apply(lambda x: group_time(x, time_resolution))
 
         # Transform Locations into numbers
         unique_locations = df['location'].unique()
@@ -181,7 +169,7 @@ def parse_title_file(file_path):
 # #         articles_df = read_preprocess_articles(articles_csv_path)
 # #
 # #         # Threats
-# #         threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\combined_output_no_dups_Time_rounded_v4.csv"
+# #         threats_csv_path = r"C:\Users\alonz\OneDrive - Technion\Documents\GitHub\rockets-threat-prediction\Data\Data_07_10_23_11_11_24\combined_data\alerts_dataset.csv"
 # #         locations_to_keep = ["קריית שמונה", "חיפה - נווה שאנן ורמות כרמל", "צפת - עיר",
 # #                              "תל אביב - מרכז העיר"]
 # #         types_to_keep = ["ירי רקטות וטילים"]

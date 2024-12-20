@@ -8,10 +8,6 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from datetime import datetime
 
-
-
-
-
 class ArticleEmbeddingNet(nn.Module):
     def __init__(self, model_name='onlplab/alephbert-base'):
         super(ArticleEmbeddingNet, self).__init__()
@@ -45,13 +41,14 @@ class ArticleEmbeddingNet(nn.Module):
 
 
 class CreateDataSet(Dataset):
-    def __init__(self, ds1, ds2, labels, last_time, seq_len1, seq_len2):
+    def __init__(self, ds1, ds2, labels, last_time, seq_len1, seq_len2, time_resolution):
         self.ds1 = ds1  # Articles
         self.ds2 = ds2  # Threats
         self.labels = labels
         self.last_time = last_time
         self.seq_len1 = seq_len1
         self.seq_len2 = seq_len2
+        self.time_resolution = time_resolution
         self.cache = {}  # Cache to store the index of the last match
 
     def __len__(self):
@@ -82,7 +79,7 @@ class CreateDataSet(Dataset):
             # Find the sequence in dataset1 that ends with the given time
             idx = None
             for (i, time) in enumerate(self.ds1[:, 0]):
-                if time > last_time + 21600:
+                if time > last_time + self.time_resolution*3600:
                     idx = i
                     break
 
@@ -119,7 +116,7 @@ def min_max_normalize(array):
 
     return normalized_array
 
-def one_hot_encoder(df):
+def one_hot_encoder(df, time_resolution):
     # Create a unique time-based identifier for grouping
 
     df['time_id'] = pd.to_datetime(df[['year', 'month', 'day', 'hour']])
@@ -159,7 +156,7 @@ def one_hot_encoder(df):
     # Create a shifted DataFrame for labels
     labels = []
     for time_id, group in grouped:
-        next_time_id = time_id + pd.Timedelta(hours=6)
+        next_time_id = time_id + pd.Timedelta(hours=time_resolution)
         # Check if next_time_id exists
         if next_time_id in grouped.groups:
             next_group = grouped.get_group(next_time_id)
@@ -183,16 +180,17 @@ def one_hot_encoder(df):
     return result_df, labels_df, time_id_df
 
 
-def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size):
+def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size, time_resolution):
 
     # Pass articles through an LLM to get embeddings:
-    # article_embedding_model = ArticleEmbeddingNet()
-    # articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
-    # articles_df.to_csv(r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles_alephbert.csv", index=False)
-    articles_df = pd.read_csv(r"C:\Users\alon.zuaretz\Documents\GitHub\rockets-threat-prediction\Data\embedded_articles_alephbert.csv")
+    if articles_df:
+        article_embedding_model = ArticleEmbeddingNet()
+        articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
+    else:
+        articles_df = pd.read_csv(r"Data\embedded_articles_alephbert.csv")
 
     # get unique row for each hour and date with a one-hot enconding:
-    threats_df, labels_df, time_id_df = one_hot_encoder(threats_df)
+    threats_df, labels_df, time_id_df = one_hot_encoder(threats_df, time_resolution)
 
     articles_np = articles_df.to_numpy()
     threats_np, labels_np = threats_df.to_numpy(), labels_df.to_numpy()
@@ -237,9 +235,9 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
     )
 
     # Dataset:
-    train_ds = CreateDataSet(articles_np, threats_train, labels_train, last_time_train, articles_seqlen, threats_seqlen)
-    val_ds = CreateDataSet(articles_np, threats_val, labels_val, last_time_train, articles_seqlen, threats_seqlen)
-    test_ds = CreateDataSet(articles_np, threats_test, labels_test, last_time_train, articles_seqlen, threats_seqlen)
+    train_ds = CreateDataSet(articles_np, threats_train, labels_train, last_time_train, articles_seqlen, threats_seqlen, time_resolution)
+    val_ds = CreateDataSet(articles_np, threats_val, labels_val, last_time_train, articles_seqlen, threats_seqlen, time_resolution)
+    test_ds = CreateDataSet(articles_np, threats_test, labels_test, last_time_train, articles_seqlen, threats_seqlen, time_resolution)
 
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)

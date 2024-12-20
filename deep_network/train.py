@@ -25,7 +25,6 @@ def calc_pos_weight(dl_train):
     return torch.tensor([pos_weight])
 
 
-
 def on_press(key):
     global stop_training
     try:
@@ -58,7 +57,7 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
     pos_weight = calc_pos_weight(dl_train)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.Adam(list(articles_NN.parameters()) + list(threats_NN.parameters()) + list(combined_NN.parameters()), lr=lr)
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
+    scheduler = StepLR(optimizer, step_size=5, gamma=0.5)
 
     avg_loss_list = []
     avg_diff_loss_list = []
@@ -86,9 +85,25 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
 
     num_of_ones = torch.zeros(1)
     num_of_zeros = torch.zeros(1)
+
+    date_mat = torch.zeros((len(dl_val.dataset), 5))
+    k = 0
+    batch_size = 16
     for articles_seq, threats_seq, labels in dl_val:
         num_of_ones += labels.sum()
         num_of_zeros += (labels.shape[0] * labels.shape[1] - labels.sum())
+        for j in range(5):
+            for i in range(len(threats_seq)):
+                idx = k * batch_size + i
+                date_mat[idx, j] = threats_seq[i, -1, j]
+        k += 1
+    date_mat[:,0] = date_mat[:,0] * 6 + 1
+    date_mat[:,1] = date_mat[:,1] * 18
+    date_mat[:,2] = date_mat[:,2] * 30 + 1
+    date_mat[:,3] = date_mat[:,3] * 11 + 1
+    date_mat[:,4] = date_mat[:,4] + 2023
+
+
 
     for epoch in range(num_epochs):
         if stop_training:
@@ -245,7 +260,8 @@ def train_model(articles_NN, threats_NN, combined_NN, dl_train, dl_val, device, 
     # Save validation outputs vs labels to .mat file
     scipy.io.savemat(os.path.join(result_folder, f'outputs_vs_labels_val.mat'), {
         'val_outputs': val_outputs,
-        'val_labels': val_labels
+        'val_labels': val_labels,
+        'val_dates': date_mat
     })
     print(f"Validation outputs vs labels saved to '{os.path.join(result_folder, f'outputs_vs_labels_val.mat')}'")
 
