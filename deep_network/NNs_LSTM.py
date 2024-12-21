@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class ArticlesNN(nn.Module):
-    def __init__(self, seq_len, emb_dim=1541, hidden_dim=1024, num_layers=1):
+    def __init__(self, seq_len, emb_dim=1541, hidden_dim=512, num_layers=1):
         super(ArticlesNN, self).__init__()
         self.seq_len = seq_len
         self.hidden_dim = hidden_dim
@@ -27,7 +26,7 @@ class ArticlesNN(nn.Module):
 
 
 class ThreatsNN(nn.Module):
-    def __init__(self, seq_len, input_dim=9, emb_dim=128, hidden_dim=1024, num_layers=1):
+    def __init__(self, seq_len, input_dim=9, emb_dim=128, hidden_dim=512, num_layers=1):
         super(ThreatsNN, self).__init__()
         self.seq_len = seq_len
         self.hidden_dim = hidden_dim
@@ -51,7 +50,7 @@ class ThreatsNN(nn.Module):
 
 
 class CombinedNN(nn.Module):
-    def __init__(self, seq_len1, seq_len2, output_size=4, emb_dim=1024, num_heads=4, hidden_dim=1024):
+    def __init__(self, seq_len1, seq_len2, output_size=4, emb_dim=1024, num_heads=4, hidden_dim=512):
         super(CombinedNN, self).__init__()
         self.cross_attention_1 = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=num_heads, batch_first=True)
         self.cross_attention_2 = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=num_heads, batch_first=True)

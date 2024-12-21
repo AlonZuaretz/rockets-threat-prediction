@@ -13,7 +13,7 @@ def read_from_csv(read_embedded_articles, time_resolution):
         articles_df = []
 
     # Threats
-    threats_csv_path = r"Data/alerts_dataset.csv"
+    threats_csv_path = r"data/alerts/alerts_dataset.csv"
     locations_threshold = 100 # locations that appear more than X times will remain in data set
     types_to_keep = ["ירי רקטות וטילים"]
     threats_df, location_mapping, type_mapping = read_preprocess_threats(threats_csv_path, locations_threshold,
@@ -23,9 +23,9 @@ def read_from_csv(read_embedded_articles, time_resolution):
 
 
 def read_preprocess_articles():
-    date_time_file = r"Data\Date_Time.txt"
-    main_titles_file = r"Data\Main_Titles.txt"
-    sub_titles_file = r"Data\Sub_Titles.txt"
+    date_time_file = r"data\articles\Date_Time.txt"
+    main_titles_file = r"data\articles\Main_Titles.txt"
+    sub_titles_file = r"data\articles\Sub_Titles.txt"
 
     # Parse each of the files
     date_time_df = parse_date_time_file(date_time_file)

@@ -187,7 +187,7 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
         article_embedding_model = ArticleEmbeddingNet()
         articles_df = article_embedding_model(articles_df)  # Shape: (N, article_embedding_size)
     else:
-        articles_df = pd.read_csv(r"Data\embedded_articles_alephbert.csv")
+        articles_df = pd.read_csv(r"data\articles\embedded_articles_alephbert.csv")
 
     # get unique row for each hour and date with a one-hot enconding:
     threats_df, labels_df, time_id_df = one_hot_encoder(threats_df, time_resolution)
