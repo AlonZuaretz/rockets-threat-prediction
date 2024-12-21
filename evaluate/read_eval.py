@@ -1,31 +1,28 @@
 
 import pandas as pd
 import re
+import os
 
 from datetime import datetime
 
 
-def read_from_csv(read_embedded_articles, time_resolution):
+def read_from_csv(alerts_path, articles_path, time_resolution):
     # Articles
-    if not read_embedded_articles:
-        articles_df = read_preprocess_articles()
-    else:
-        articles_df = []
+    articles_df = read_preprocess_articles(articles_path)
 
     # Threats
-    threats_csv_path = r"data/alerts/alerts_dataset.csv"
-    locations_threshold = 100 # locations that appear more than X times will remain in data set
+    threats_csv_path = alerts_path
     types_to_keep = ["ירי רקטות וטילים"]
-    threats_df, location_mapping = read_preprocess_threats(threats_csv_path, locations_threshold,
-                                                                         types_to_keep, time_resolution)
+    threats_df, location_mapping = read_preprocess_threats(threats_csv_path,
+                                                                     types_to_keep, time_resolution)
 
     return articles_df, threats_df, location_mapping
 
 
-def read_preprocess_articles():
-    date_time_file = r"data\articles\Date_Time.txt"
-    main_titles_file = r"data\articles\Main_Titles.txt"
-    sub_titles_file = r"data\articles\Sub_Titles.txt"
+def read_preprocess_articles(path):
+    date_time_file = os.path.join(path, "Date_Time.txt")
+    main_titles_file = os.path.join(path, "Main_Titles.txt")
+    sub_titles_file = os.path.join(path, "Sub_Titles.txt")
 
     # Parse each of the files
     date_time_df = parse_date_time_file(date_time_file)
@@ -66,22 +63,12 @@ def group_time(hour_str, resolution):
     return (hour // resolution) * resolution
 
 
-def read_preprocess_threats(file_path, locations_to_keep, types_to_keep, time_resolution):
+def read_preprocess_threats(file_path, types_to_keep, time_resolution):
         # Read the CSV file with UTF-8 encoding, which supports Hebrew
         df = pd.read_csv(file_path, encoding='utf-8')
 
         # Flip the dataset so that the last row becomes the first
         df = df.iloc[::-1].reset_index(drop=True)
-
-        # Filter rows
-        # Count the occurrences of each location
-        location_counts = df['location'].value_counts()
-
-        # Filter locations that appear more than X times
-        locations_to_keep = location_counts[location_counts > locations_to_keep].index
-
-        # Keep only rows with locations that appear more than X times
-        df = df[df['location'].isin(locations_to_keep)]
 
         # Keep only rows with predefined types:
         df = df[df['type'].isin(types_to_keep)]
