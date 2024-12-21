@@ -226,24 +226,18 @@ def process(articles_df, threats_df, articles_seqlen, threats_seqlen, batch_size
         last_time[i] = int(time_id_df[i+threats_seqlen-1].timestamp())
 
     # Split threats into train, test, validation sets
-    threats_train, threats_temp, labels_train, labels_temp, last_time_train, last_time_temp = train_test_split(
+    threats_train, threats_test, labels_train, labels_test, last_time_train, last_time_test = train_test_split(
         threats_sequences, labels, last_time, test_size=0.3, random_state=42
-    )
-
-    threats_val, threats_test, labels_val, labels_test, last_time_val, last_time_test = train_test_split(
-        threats_temp, labels_temp, last_time_temp, test_size=1, random_state=42
     )
 
     # Dataset:
     train_ds = CreateDataSet(articles_np, threats_train, labels_train, last_time_train, articles_seqlen, threats_seqlen, time_resolution)
-    val_ds = CreateDataSet(articles_np, threats_val, labels_val, last_time_train, articles_seqlen, threats_seqlen, time_resolution)
     test_ds = CreateDataSet(articles_np, threats_test, labels_test, last_time_train, articles_seqlen, threats_seqlen, time_resolution)
 
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
-    return train_dl, val_dl, test_dl
+    return train_dl, test_dl
 
 
 

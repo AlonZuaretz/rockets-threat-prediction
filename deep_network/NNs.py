@@ -2,12 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformer_block import TransformerBlock
+from deep_network.transformer_block import TransformerBlock
 
 class ArticlesNN(nn.Module):
     def __init__(self, seq_len, emb_dim=1541, n_heads=4, n_layers=1, hidden_dim=512):
         super(ArticlesNN, self).__init__()
-        self.n_layers = n_layers
         self.seq_len = seq_len
 
         self.projection_layer = nn.Linear(emb_dim, 1544)
@@ -17,12 +16,13 @@ class ArticlesNN(nn.Module):
             TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim)
         )
 
-        self._initialize_weights()
-
     def _initialize_weights(self):
-        nn.init.xavier_uniform_(self.projection_layer.weight)
-        nn.init.constant_(self.projection_layer.bias, 0)
-        nn.init.normal_(self.positional_encoding, mean=0, std=0.1)
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Parameter):
+                nn.init.normal_(module, mean=0, std=0.1)
 
     def forward(self, x):
         x = self.projection_layer(x)
@@ -36,8 +36,8 @@ class ArticlesNN(nn.Module):
 class ThreatsNN(nn.Module):
     def __init__(self, seq_len, input_dim=9, emb_dim=128, n_heads=4, n_layers=1, hidden_dim=512):
         super(ThreatsNN, self).__init__()
-        self.n_layers = n_layers
         self.seq_len = seq_len
+
         self.embedding = nn.Sequential(
             nn.Linear(input_dim, emb_dim),
             nn.GELU(),
@@ -49,12 +49,13 @@ class ThreatsNN(nn.Module):
             TransformerBlock(hidden_dim, hidden_dim, n_heads, hidden_dim)
         )
 
-        self._initialize_weights()
-
     def _initialize_weights(self):
-        nn.init.xavier_uniform_(self.embedding.weight)
-        nn.init.constant_(self.embedding.bias, 0)
-        nn.init.normal_(self.positional_encoding, mean=0, std=0.1)
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Parameter):
+                nn.init.normal_(module, mean=0, std=0.1)
 
     def forward(self, x):
         x = self.embedding(x)
@@ -81,13 +82,13 @@ class CombinedNN(nn.Module):
         )
         self.sigmoid = nn.Sigmoid()
 
-        self._initialize_weights()
-
     def _initialize_weights(self):
-        for layer in self.fc:
-            if isinstance(layer, nn.Linear):
-                nn.init.xavier_uniform_(layer.weight)
-                nn.init.constant_(layer.bias, 0)
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Parameter):
+                nn.init.normal_(module, mean=0, std=0.1)
 
     def forward(self, seq1, seq2):
         attn_output_1, _ = self.cross_attention_1(query=seq1, key=seq2, value=seq2)

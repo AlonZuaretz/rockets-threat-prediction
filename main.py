@@ -3,7 +3,7 @@ import json
 
 from data_handling.process_data import process
 from data_handling.read import read_from_csv
-from deep_network.NNs_LSTM import ArticlesNN, ThreatsNN, CombinedNN
+from deep_network.NNs import ArticlesNN, ThreatsNN, CombinedNN
 from deep_network.train import train_model
 
 if __name__ == "__main__":
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Process data
-    train_dl, val_dl, test_dl = process(articles_df, threats_df,
+    train_dl, test_dl = process(articles_df, threats_df,
                                         articles_seqlen, threats_seqlen, batch_size, time_resolution)
 
     # Instantiate the models:
@@ -36,4 +36,4 @@ if __name__ == "__main__":
     combined_model = CombinedNN(articles_seqlen, threats_seqlen, output_size=num_locations).to(device)
 
     # Train the model
-    train_model(articles_model, threats_model, combined_model, train_dl, val_dl, device, num_epochs, lr)
+    train_model(articles_model, threats_model, combined_model, train_dl, test_dl, device, num_epochs, lr)
